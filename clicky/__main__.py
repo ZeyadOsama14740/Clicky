@@ -47,8 +47,9 @@ def selftest(image_path: str) -> int:
         client = create_app(app).test_client()
         if client.get("/").status_code != 200 or client.get("/api/meta").status_code != 200:
             raise RuntimeError("settings page failed")
-        import pystray  # noqa: F401
-        from pynput.keyboard import Controller  # noqa: F401
+        if sys.platform == "win32":
+            import pystray  # noqa: F401
+            from pynput.keyboard import Controller  # noqa: F401
 
         log.info("SELFTEST OK: %d hand(s): %s", len(hands), [h.label for h in hands])
         return 0
