@@ -92,7 +92,10 @@ class ClickyApp:
         self._log_event("lock" if locked else "unlock", "", "")
 
     def test_action(self, action: str):
-        return self.sender.send(action)
+        sent = self.sender.send(action)
+        if sent:
+            self._log_event("manual_test", "", sent)
+        return sent
 
     def status(self):
         return {
@@ -202,7 +205,7 @@ class ClickyApp:
         self._log_event(event.gesture, event.hand, sent or action)
 
     def _log_event(self, gesture, hand, action):
-        names = {"lock": "قفل التحكم", "unlock": "فتح التحكم", **GESTURES}
+        names = {"lock": "قفل التحكم", "unlock": "فتح التحكم", "manual_test": "زرار جرّب", **GESTURES}
         self.events.append(
             {
                 "time": time.strftime("%H:%M:%S"),

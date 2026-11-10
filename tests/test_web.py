@@ -39,6 +39,9 @@ def test_test_action_and_lock(tmp_path):
     assert client.post("/api/test/toggle_show").get_json()["sent"] == "start_show"
     assert client.post("/api/test/toggle_show").get_json()["sent"] == "end_show"
     assert client.post("/api/test/nope").status_code == 404
+    events = client.get("/api/status").get_json()["events"]
+    assert [e["action"] for e in events[:2]] == ["end_show", "start_show"]
+    assert events[0]["gesture"] == "manual_test"
     assert client.post("/api/lock", json={}).get_json()["locked"] is True
     assert app.engine.locked
     assert client.get("/api/status").get_json()["locked"] is True
