@@ -54,6 +54,24 @@
   .cheats { display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:13px; color:var(--muted); }
   .cheats b { color:var(--text); }
   .full { grid-column: 1 / -1; }
+  .modal-bg { position:fixed; inset:0; background:rgba(5,7,15,.75); display:none; align-items:center; justify-content:center; z-index:20; }
+  .modal-bg.show { display:flex; }
+  .modal { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 22px; width:min(720px, 94vw); max-height:94vh; overflow:auto; }
+  .modal h2 { margin:0 0 6px; }
+  .steps { display:flex; gap:6px; margin:10px 0 14px; }
+  .steps div { flex:1; height:5px; border-radius:3px; background:#272d4a; }
+  .steps div.done { background:var(--accent); }
+  .instruction { font-size:19px; margin:10px 0; min-height:28px; }
+  .countdown { font-size:44px; font-weight:bold; text-align:center; color:var(--accent); min-height:56px; }
+  .bar { height:8px; background:#272d4a; border-radius:4px; overflow:hidden; margin:8px 0; }
+  .bar div { height:100%; width:0; background:var(--ok); transition:width .1s linear; }
+  .live { color:var(--muted); font-size:13px; text-align:center; }
+  .modal .preview { aspect-ratio:16/9; max-height:280px; margin:auto; }
+  table.cmp { width:100%; border-collapse:collapse; margin:10px 0; font-size:14px; }
+  table.cmp td, table.cmp th { padding:7px; border-bottom:1px solid var(--border); text-align:right; }
+  table.cmp td.new { color:var(--ok); font-weight:bold; }
+  .msg { color:#ffb547; font-size:13px; margin:4px 0; }
+  .actions-row { display:flex; gap:8px; margin-top:14px; justify-content:flex-start; }
 </style>
 </head>
 <body>
@@ -62,6 +80,7 @@
   <span id="camPill" class="pill">الكاميرا...</span>
   <span id="fpsPill" class="pill">0 FPS</span>
   <span id="showPill" class="pill">العرض: متوقف</span>
+  <span id="pptPill" class="pill">PowerPoint</span>
   <div class="spacer"></div>
   <button id="lockBtn">إيقاف مؤقت</button>
 </header>
@@ -108,7 +127,8 @@
 
   <section class="card">
     <h2>الحساسية</h2>
-    <p class="hint">لو البرنامج بيقلب سلايدات لوحده، قلل الحساسية. ولو مش بيلقط إيماءاتك، زودها.</p>
+    <p class="hint">لو البرنامج بيقلب سلايدات لوحده، قلل الحساسية. ولو مش بيلقط إيماءاتك، زودها. أو خلّي المعايرة تظبطها على إيدك.</p>
+    <button id="calibrateBtn" style="margin-bottom:8px">ابدأ المعايرة التلقائية</button>
     <div id="sensitivity"></div>
   </section>
 
@@ -119,6 +139,12 @@
     <div class="row"><label>الدقة<small>دقة أعلى = تتبع أحسن من بعيد، بس استهلاك معالج أكتر</small></label>
       <select id="resolution"><option value="640x480">640×480</option><option value="1280x720">1280×720 (مستحسن)</option><option value="1920x1080">1920×1080 (للمسافات البعيدة)</option></select></div>
     <div class="row"><label>الكاميرا بتعكس الصورة<small>فعّلها لو إيدك اليمين بتظهر "Left"</small></label><div class="switch"><input type="checkbox" id="camera_mirrored"></div></div>
+    <div class="row"><label>طريقة التحكم<small>PowerPoint مباشرة بيقلب السلايدات حتى لو نافذته مش هي النشطة</small></label>
+      <select id="control_method"><option value="auto">PowerPoint مباشرة (والكيبورد لأي برنامج تاني)</option><option value="keyboard">كيبورد بس</option></select></div>
+    <div class="row"><label>المؤشر على الشاشة<small>دايرة صغيرة بتنور لما يشوف إيدك وبتبين الأمر اللي اتنفذ</small></label><div class="switch"><input type="checkbox" id="overlay_enabled"></div></div>
+    <div class="row"><label>مكان المؤشر</label>
+      <select id="overlay_position"><option value="top-right">فوق يمين</option><option value="top-left">فوق شمال</option><option value="bottom-right">تحت يمين</option><option value="bottom-left">تحت شمال</option></select></div>
+    <div class="row"><label>شفافية المؤشر</label><div class="slider"><input type="range" id="overlay_opacity" min="0.2" max="1" step="0.05"><output id="overlay_opacity_out"></output></div></div>
     <div class="row"><label>قفل/فتح بالقبضة</label><div class="switch"><input type="checkbox" id="lock_enabled"></div></div>
     <div class="row"><label>افتح الصفحة دي مع تشغيل البرنامج</label><div class="switch"><input type="checkbox" id="open_settings_on_start"></div></div>
     <div class="row"><label>بورت صفحة الإعدادات<small>بيتطبق بعد إعادة تشغيل البرنامج</small></label><input type="number" id="web_port"></div>
@@ -126,6 +152,20 @@
   </section>
 </main>
 <div class="toast" id="toast">تم الحفظ</div>
+
+<div class="modal-bg" id="calModal">
+  <div class="modal">
+    <h2>المعايرة التلقائية</h2>
+    <div class="steps" id="calSteps"><div></div><div></div><div></div><div></div></div>
+    <div class="instruction" id="calText"></div>
+    <div class="preview" id="calPreview"></div>
+    <div class="countdown" id="calCount"></div>
+    <div class="bar"><div id="calBar"></div></div>
+    <div class="live" id="calLive"></div>
+    <div id="calResult"></div>
+    <div class="actions-row" id="calButtons"></div>
+  </div>
+</div>
 
 <script>
 const SLIDERS = [
@@ -169,7 +209,7 @@ function buildGestures() {
     for (const [a, al] of Object.entries(meta.actions)) sel.add(new Option(al, a));
     sel.onchange = () => save({ actions: { [g]: sel.value } });
     const btn = document.createElement("button"); btn.className = "secondary"; btn.textContent = "جرّب";
-    btn.onclick = async () => { const r = await api("/api/test/" + sel.value, {}); toast(r.sent ? "اتبعت: " + meta.actions[r.sent] : "مفيش أمر"); };
+    btn.onclick = async () => { const r = await api("/api/test/" + sel.value, {}); toast(r.sent ? "اتبعت: " + meta.actions[r.sent] + (r.channel === "powerpoint" ? " (PowerPoint)" : "") : "مفيش أمر"); };
     const l = document.createElement("label"); l.textContent = label;
     row.append(l, sel, btn); box.append(row);
   }
@@ -193,7 +233,10 @@ function render() {
   for (const [key] of SLIDERS) { $(key).value = cfg[key]; $(key + "_out").textContent = cfg[key]; }
   for (const g of Object.keys(meta.gestures)) $("act_" + g).value = cfg.actions[g];
   document.querySelectorAll(".mode").forEach(m => m.classList.toggle("active", m.dataset.mode === cfg.mode));
-  for (const k of ["camera_mirrored", "lock_enabled", "open_settings_on_start"]) $(k).checked = cfg[k];
+  for (const k of ["camera_mirrored", "lock_enabled", "open_settings_on_start", "overlay_enabled"]) $(k).checked = cfg[k];
+  $("control_method").value = cfg.control_method;
+  $("overlay_position").value = cfg.overlay_position;
+  $("overlay_opacity").value = cfg.overlay_opacity; $("overlay_opacity_out").textContent = cfg.overlay_opacity;
   $("web_port").value = cfg.web_port;
   const res = cfg.camera_width + "x" + cfg.camera_height;
   if (![...$("resolution").options].some(o => o.value === res)) $("resolution").add(new Option(res.replace("x", "×"), res));
@@ -221,6 +264,10 @@ async function pollStatus() {
     $("fpsPill").textContent = s.fps + " FPS";
     $("showPill").textContent = s.showing ? "العرض: شغال" : "العرض: متوقف";
     $("showPill").className = "pill " + (s.showing ? "ok" : "");
+    const pp = $("pptPill");
+    if (cfg.control_method === "keyboard") { pp.textContent = "التحكم: كيبورد"; pp.className = "pill"; }
+    else if (s.slide) { pp.textContent = s.slide.slide ? `PowerPoint: سلايد ${s.slide.slide} من ${s.slide.total}` : "PowerPoint مفتوح"; pp.className = "pill ok"; }
+    else { pp.textContent = "PowerPoint مش مفتوح (كيبورد)"; pp.className = "pill"; }
     const lb = $("lockBtn");
     lb.textContent = s.locked ? "التحكم مقفول - اضغط للتشغيل" : "إيقاف مؤقت";
     lb.className = s.locked ? "danger" : "";
@@ -229,12 +276,77 @@ async function pollStatus() {
       `<div class="hand">${h === "Right" ? "اليمين" : "الشمال"}: <b>${poses[v.pose] || v.pose}</b> · المسافة ${v.pinch}</div>`).join("")
       || '<div class="hand" style="color:var(--muted)">مفيش إيد قدام الكاميرا</div>';
     if (s.events.length) {
-      $("log").innerHTML = s.events.map(e => `<div><time>${e.time}</time><span>${e.gesture_label}</span>${e.action && e.action !== "none" ? `<span style="color:var(--ok)">← ${e.action_label}</span>` : ""}</div>`).join("");
+      $("log").innerHTML = s.events.map(e => `<div><time>${e.time}</time><span>${e.gesture_label}</span>${e.action && e.action !== "none" ? `<span style="color:var(--ok)">← ${e.action_label}</span>${e.channel === "powerpoint" ? '<span class="pill" style="padding:0 8px">PowerPoint</span>' : ""}` : ""}</div>`).join("");
     }
   } catch (e) {
     $("camPill").textContent = "البرنامج مش شغال"; $("camPill").className = "pill bad";
   }
   setTimeout(pollStatus, 400);
+}
+
+const CAL_STEPS = [
+  { phase: "open", seconds: 3, text: "افرد إيدك قدام الكاميرا وسيب الصوابع مفتوحة ومرتاحة" },
+  { phase: "pinch", seconds: 3, text: "المس الإبهام بالسبابة واثبت كده" },
+  { phase: "swipe", seconds: 6, text: "اسحب إيدك المفتوحة يمين وشمال بسرعة، 3 مرات أو أكتر" },
+];
+const LABELS = { pinch_on: "مسافة اللمسة", pinch_off: "مسافة الفك", swipe_distance: "مسافة السحب", swipe_window: "سرعة السحب (ثانية)", min_hand_size: "أصغر حجم لليد" };
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+let calCancelled = false;
+
+function calButtons(buttons) {
+  const box = $("calButtons"); box.innerHTML = "";
+  for (const [label, cls, fn] of buttons) { const b = document.createElement("button"); b.textContent = label; b.className = cls; b.onclick = fn; box.append(b); }
+}
+function calStep(n) { [...$("calSteps").children].forEach((d, i) => d.classList.toggle("done", i < n)); }
+
+async function closeCalibration() {
+  calCancelled = true;
+  await api("/api/calibration/end", {});
+  $("calPreview").innerHTML = ""; $("calModal").classList.remove("show");
+}
+
+async function calibrate() {
+  calCancelled = false;
+  $("calModal").classList.add("show");
+  $("calPreview").innerHTML = '<img src="/stream.mjpg?' + Date.now() + '" alt="preview">';
+  $("calResult").innerHTML = ""; $("calCount").textContent = ""; $("calBar").style.width = "0"; $("calLive").textContent = "";
+  calStep(0);
+  $("calText").textContent = "اقف في المكان اللي هتعرض منه، وخلي إيدك باينة في الكاميرا. هنعمل 3 خطوات قصيرة، والإيماءات مش هتقلب سلايدات وانت بتعاير.";
+  calButtons([["ابدأ", "", runCalibration], ["إلغاء", "secondary", closeCalibration]]);
+}
+
+async function runCalibration() {
+  await api("/api/calibration/begin", {});
+  calButtons([["إلغاء", "secondary", closeCalibration]]);
+  for (let i = 0; i < CAL_STEPS.length; i++) {
+    const step = CAL_STEPS[i];
+    calStep(i); $("calText").textContent = step.text; $("calBar").style.width = "0";
+    for (let c = 3; c > 0; c--) { if (calCancelled) return; $("calCount").textContent = c; await sleep(800); }
+    $("calCount").textContent = "سجّل...";
+    await api("/api/calibration/phase/" + step.phase, {});
+    const start = Date.now();
+    while (Date.now() - start < step.seconds * 1000) {
+      if (calCancelled) return;
+      const st = await api("/api/calibration");
+      $("calBar").style.width = Math.min(100, (Date.now() - start) / (step.seconds * 10)) + "%";
+      const l = st.live || {};
+      $("calLive").textContent = l.hand ? `إيد ظاهرة ✓ · المسافة ${l.ratio} · صوابع مفرودة ${l.extended}` : "مش شايف إيد ✗";
+      await sleep(150);
+    }
+    await api("/api/calibration/stop", {});
+  }
+  calStep(4); $("calCount").textContent = ""; $("calText").textContent = "النتيجة";
+  const p = await api("/api/calibration/propose", {});
+  let html = p.messages.map(m => `<div class="msg">${m}</div>`).join("");
+  const keys = Object.keys(p.values);
+  if (keys.length) {
+    html += '<table class="cmp"><tr><th>الإعداد</th><th>الحالي</th><th>المقترح</th></tr>' +
+      keys.map(k => `<tr><td>${LABELS[k] || k}</td><td>${p.current[k]}</td><td class="new">${p.values[k]}</td></tr>`).join("") + "</table>";
+  }
+  $("calResult").innerHTML = html;
+  const buttons = [["إعادة", "secondary", () => { $("calResult").innerHTML = ""; runCalibration(); }], ["إلغاء", "secondary", closeCalibration]];
+  if (keys.length) buttons.unshift(["تطبيق", "", async () => { cfg = await api("/api/config", p.values); render(); await closeCalibration(); toast("اتطبقت إعدادات المعايرة"); }]);
+  calButtons(buttons);
 }
 
 async function init() {
@@ -243,7 +355,11 @@ async function init() {
   $("version").textContent = "v" + meta.version;
   buildGestures(); buildSliders(); render();
   document.querySelectorAll(".mode input").forEach(i => i.onchange = () => save({ mode: i.value }));
-  for (const k of ["camera_mirrored", "lock_enabled", "open_settings_on_start"]) $(k).onchange = () => save({ [k]: $(k).checked });
+  for (const k of ["camera_mirrored", "lock_enabled", "open_settings_on_start", "overlay_enabled"]) $(k).onchange = () => save({ [k]: $(k).checked });
+  for (const k of ["control_method", "overlay_position"]) $(k).onchange = () => save({ [k]: $(k).value });
+  $("overlay_opacity").oninput = () => { $("overlay_opacity_out").textContent = $("overlay_opacity").value; };
+  $("overlay_opacity").onchange = () => save({ overlay_opacity: parseFloat($("overlay_opacity").value) });
+  $("calibrateBtn").onclick = calibrate;
   $("web_port").onchange = () => save({ web_port: parseInt($("web_port").value) });
   $("camera_index").onchange = () => save({ camera_index: parseInt($("camera_index").value) });
   $("resolution").onchange = () => { const [w, h] = $("resolution").value.split("x").map(Number); save({ camera_width: w, camera_height: h }); };

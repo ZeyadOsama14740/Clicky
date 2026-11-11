@@ -6,7 +6,8 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 from werkzeug.serving import make_server
 
 from . import __version__
-from .config import ACTIONS, DEFAULTS, GESTURES, LIMITS, MODES
+from .calibration import PHASES
+from .config import ACTIONS, CHOICES, DEFAULTS, GESTURES, LIMITS
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def create_app(clicky):
             actions=ACTIONS,
             gestures=GESTURES,
             limits=LIMITS,
-            modes=MODES,
+            choices=CHOICES,
             defaults=DEFAULTS,
         )
 
@@ -58,7 +59,48 @@ def create_app(clicky):
     def test_action(action):
         if action not in ACTIONS:
             return jsonify(error="unknown action"), 404
-        return jsonify(sent=clicky.test_action(action))
+        result = clicky.test_action(action)
+        return jsonify(sent=result[0] if result else None, channel=result[1] if result else None)
+
+    @app.post("/api/calibration/begin")
+    def calibration_begin():
+        return jsonify(clicky.calibration_begin())
+
+    @app.get("/api/calibration")
+    def calibration_status():
+        cal = clicky.calibrator
+        return jsonify(cal.status() if cal else {"phase": None, "active": False})
+
+    @app.post("/api/calibration/phase/<phase>")
+    def calibration_phase(phase):
+        cal = clicky.calibrator
+        if cal is None or phase not in PHASES:
+            return jsonify(error="calibration not active"), 400
+        cal.start(phase)
+        return jsonify(cal.status())
+
+    @app.post("/api/calibration/stop")
+    def calibration_stop():
+        cal = clicky.calibrator
+        if cal is None:
+            return jsonify(error="calibration not active"), 400
+        cal.stop()
+        return jsonify(cal.status())
+
+    @app.post("/api/calibration/propose")
+    def calibration_propose():
+        cal = clicky.calibrator
+        if cal is None:
+            return jsonify(error="calibration not active"), 400
+        proposal = cal.propose()
+        cfg = clicky.store.get()
+        proposal["current"] = {k: cfg[k] for k in proposal["values"]}
+        return jsonify(proposal)
+
+    @app.post("/api/calibration/end")
+    def calibration_end():
+        clicky.calibration_end()
+        return jsonify(ok=True)
 
     @app.get("/api/cameras")
     def cameras():

@@ -29,6 +29,13 @@ GESTURES = {
 
 MODES = ("near", "far", "both")
 
+# settings that must be one of a fixed set of values
+CHOICES = {
+    "mode": MODES,
+    "control_method": ("auto", "keyboard"),
+    "overlay_position": ("top-right", "top-left", "bottom-right", "bottom-left"),
+}
+
 DEFAULTS = {
     "camera_index": 0,
     "camera_width": 1280,
@@ -51,6 +58,10 @@ DEFAULTS = {
     "tracking_confidence": 0.5,
     "web_port": 8765,
     "open_settings_on_start": True,
+    "control_method": "auto",
+    "overlay_enabled": True,
+    "overlay_position": "top-right",
+    "overlay_opacity": 0.85,
     "actions": {
         "right_pinch": "next",
         "left_pinch": "prev",
@@ -81,6 +92,7 @@ LIMITS = {
     "detection_confidence": (0.1, 0.95),
     "tracking_confidence": (0.1, 0.95),
     "web_port": (1024, 65535),
+    "overlay_opacity": (0.2, 1.0),
 }
 
 
@@ -104,8 +116,8 @@ def validate(data: dict, base: dict) -> dict:
                 for g, a in value.items():
                     if g in GESTURES and a in ACTIONS:
                         result["actions"][g] = a
-        elif key == "mode":
-            if value in MODES:
+        elif key in CHOICES:
+            if value in CHOICES[key]:
                 result[key] = value
         elif isinstance(default, bool):
             result[key] = bool(value)

@@ -6,7 +6,8 @@ from collections import deque
 
 import cv2
 
-from .actions import KeySender
+from .actions import ActionSender
+from .calibration import Calibrator
 from .config import ACTIONS, GESTURES, ConfigStore
 from .gestures import GestureEngine
 from .tracker import HandTracker
@@ -47,10 +48,12 @@ PREVIEW_FPS = 15
 
 
 class ClickyApp:
-    def __init__(self, store: ConfigStore, sender: KeySender):
+    def __init__(self, store: ConfigStore, dry_run=False, powerpoint=None):
         self.store = store
-        self.sender = sender
         self.cfg = store.get()
+        self.sender = ActionSender(lambda: self.cfg, dry_run=dry_run, powerpoint=powerpoint)
+        self.last_action = None  # (monotonic time, action) for the on-screen indicator
+        self.calibrator: Calibrator | None = None
         self.engine = GestureEngine(lambda: self.cfg)
         self.events = deque(maxlen=30)
         self.fps = 0.0
@@ -77,6 +80,7 @@ class ClickyApp:
         self._restart.set()
         if self._thread:
             self._thread.join(timeout=3)
+        self.sender.close()
 
     def wait(self, timeout=None):
         return self._stop.wait(timeout)
@@ -92,10 +96,20 @@ class ClickyApp:
         self._log_event("lock" if locked else "unlock", "", "")
 
     def test_action(self, action: str):
-        sent = self.sender.send(action)
-        if sent:
-            self._log_event("manual_test", "", sent)
-        return sent
+        result = self.sender.send_wait(action)
+        if result:
+            self._log_event("manual_test", "", *result)
+        return result
+
+    # calibration: while active, gestures don't trigger actions
+    def calibration_begin(self):
+        self.calibrator = Calibrator()
+        self.engine.reset()
+        return self.calibrator.status()
+
+    def calibration_end(self):
+        self.calibrator = None
+        self.engine.reset()
 
     def status(self):
         return {
@@ -104,6 +118,9 @@ class ClickyApp:
             "fps": round(self.fps, 1),
             "locked": self.engine.locked,
             "showing": self.sender.showing,
+            "control": "powerpoint" if self.sender.ppt["running"] else "keyboard",
+            "slide": self.sender.ppt if self.sender.ppt["running"] else None,
+            "calibrating": self.calibrator is not None,
             "hands": self.engine.status(),
             "events": list(self.events)[::-1],
         }
@@ -185,8 +202,13 @@ class ClickyApp:
             mirror = not cfg["camera_mirrored"]
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             hands = tracker.process(rgb, int(t * 1000), mirror=mirror)
-            for event in self.engine.update(hands, t):
-                self._handle(event, cfg)
+            calibrator = self.calibrator
+            if calibrator is not None:
+                calibrator.feed(hands, t)
+            else:
+                for event in self.engine.update(hands, t):
+                    self._handle(event, cfg)
+            self.sender.refresh_status()
 
             frames += 1
             if t - fps_t >= 1.0:
@@ -201,10 +223,16 @@ class ClickyApp:
             self._log_event(event.gesture, event.hand, "")
             return
         action = cfg["actions"].get(event.gesture, "none")
-        sent = self.sender.send(action)
-        self._log_event(event.gesture, event.hand, sent or action)
 
-    def _log_event(self, gesture, hand, action):
+        def done(future):
+            result = future.result() if not future.exception() else None
+            self._log_event(event.gesture, event.hand, *(result or (action, "")))
+
+        self.sender.send(action).add_done_callback(done)
+
+    def _log_event(self, gesture, hand, action, channel=""):
+        if action in ACTIONS and action != "none" and channel:
+            self.last_action = (time.monotonic(), action)
         names = {"lock": "قفل التحكم", "unlock": "فتح التحكم", "manual_test": "زرار جرّب", **GESTURES}
         self.events.append(
             {
@@ -214,9 +242,10 @@ class ClickyApp:
                 "hand": hand,
                 "action": action,
                 "action_label": ACTIONS.get(action, action),
+                "channel": channel,
             }
         )
-        log.info("gesture=%s hand=%s action=%s", gesture, hand, action)
+        log.info("gesture=%s hand=%s action=%s via=%s", gesture, hand, action, channel)
         if gesture in ("lock", "unlock"):
             for fn in self.lock_listeners:
                 fn(gesture == "lock")

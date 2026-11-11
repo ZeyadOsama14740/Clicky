@@ -18,8 +18,11 @@ a = Analysis(
         "pynput.keyboard._win32",
         "pynput.mouse._win32",
         "pystray._win32",
+        "win32com.client",
+        "pythoncom",
+        "pywintypes",
     ],
-    excludes=["tkinter", "matplotlib.tests", "IPython", "jupyter", "jax", "tensorflow", "torch"],
+    excludes=["matplotlib.tests", "IPython", "jupyter", "jax", "tensorflow", "torch"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
