@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+*.spec.bak
+clicky/assets/hand_landmarker.task
+.pytest_cache/
+.ruff_cache/
